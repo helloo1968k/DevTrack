@@ -1,0 +1,29 @@
+# Frontend
+FrontEnd/node_modules/
+FrontEnd/dist/
+FrontEnd/.env
+FrontEnd/.env.local
+
+# .NET build output
+**/bin/
+**/obj/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.user
+*.suo
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
