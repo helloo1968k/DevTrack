@@ -7,6 +7,8 @@ import { Avatar, Button } from '@/components/Basics'
 import { PriorityBadge, TypeBadge, statusColor } from '@/components/Badges'
 import { CreateWorkItemModal } from '@/components/CreateWorkItemModal'
 import { WorkItemDrawer } from '@/components/WorkItemDrawer'
+import { ManageMembersModal } from '@/components/ManageMembersModal'
+import { getBoardConnection } from '@/lib/signalr'
 
 export default function BoardPage() {
   const { projectId } = useParams()
@@ -20,6 +22,41 @@ export default function BoardPage() {
   const [selected, setSelected] = useState<WorkItemDto | null>(null)
   const [search, setSearch] = useState('')
   const [dragOverStatus, setDragOverStatus] = useState<WorkItemStatus | null>(null)
+  const [showMembers, setShowMembers] = useState(false)
+
+useEffect(() => {
+  if (!pid) return
+
+  const connection = getBoardConnection()
+
+  function upsertItem(item: WorkItemDto) {
+    setItems((prev) => {
+      const exists = prev.some((i) => i.id === item.id)
+      return exists ? prev.map((i) => (i.id === item.id ? item : i)) : [item, ...prev]
+    })
+  }
+
+  connection.on('WorkItemCreated', upsertItem)
+  connection.on('WorkItemUpdated', upsertItem)
+  connection.on('WorkItemDeleted', (id: number) => {
+    setItems((prev) => prev.filter((i) => i.id !== id))
+  })
+
+  async function start() {
+    if (connection.state === 'Disconnected') {
+      await connection.start()
+    }
+    await connection.invoke('JoinProject', pid)
+  }
+  start().catch(console.error)
+
+  return () => {
+    connection.invoke('LeaveProject', pid).catch(() => {})
+    connection.off('WorkItemCreated', upsertItem)
+    connection.off('WorkItemUpdated', upsertItem)
+    connection.off('WorkItemDeleted')
+  }
+}, [pid])
 
   useEffect(() => {
     if (!pid) return
@@ -105,6 +142,7 @@ export default function BoardPage() {
             placeholder="Search work items…"
             className="input w-56"
           />
+          <Button  onClick={() => setShowMembers(true)}>Members</Button>
           <Button onClick={() => setShowCreate(true)}>+ New item</Button>
         </div>
       </div>
@@ -202,6 +240,13 @@ export default function BoardPage() {
           }}
         />
       )}
+      {showMembers && (
+           <ManageMembersModal
+            projectId={pid}
+            ownerId={project.ownerId}
+            onClose={() => setShowMembers(false)}
+        />
+       )}
     </div>
   )
 }

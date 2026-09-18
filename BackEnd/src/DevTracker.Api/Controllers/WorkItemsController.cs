@@ -1,7 +1,10 @@
+using DevTracker.Api.Hubs;
 using DevTracker.Application.DTOs;
 using DevTracker.Application.Interfaces;
 using DevTracker.Domain.Enums;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace DevTracker.Api.Controllers;
 
@@ -11,16 +14,19 @@ public class WorkItemsController : ApiControllerBase
     private readonly IWorkItemService _workItemService;
     private readonly ICommentService _commentService;
 
-    public WorkItemsController(IWorkItemService workItemService, ICommentService commentService)
+    private readonly IHubContext<BoardHub> _hub;
+    public WorkItemsController(IWorkItemService workItemService, ICommentService commentService , IHubContext<BoardHub> hub)
     {
         _workItemService = workItemService;
         _commentService = commentService;
+        _hub = hub;
     }
 
     [HttpPost]
     public async Task<ActionResult<WorkItemDto>> Create(int projectId, CreateWorkItemRequest request)
     {
         var result = await _workItemService.CreateAsync(projectId, CurrentUserId, request);
+        await _hub.Clients.Group(BoardHub.GroupName(projectId)).SendAsync("WorkItemCreated", result);
         return CreatedAtAction(nameof(GetById), new { projectId, workItemId = result.Id }, result);
     }
 
@@ -49,21 +55,26 @@ public class WorkItemsController : ApiControllerBase
     [HttpPut("{workItemId:int}")]
     public async Task<ActionResult<WorkItemDto>> Update(int projectId, int workItemId, UpdateWorkItemRequest request)
     {
-        return Ok(await _workItemService.UpdateAsync(workItemId, CurrentUserId, request));
+        var result = await _workItemService.UpdateAsync(workItemId, CurrentUserId, request);
+        await _hub.Clients.Group(BoardHub.GroupName(projectId)).SendAsync("WorkItemUpdated", result);
+        return Ok(result);
     }
 
     [HttpPatch("{workItemId:int}/status")]
     public async Task<ActionResult<WorkItemDto>> UpdateStatus(int projectId, int workItemId, UpdateWorkItemStatusRequest request)
     {
-        return Ok(await _workItemService.UpdateStatusAsync(workItemId, CurrentUserId, request));
+        var result = await _workItemService.UpdateStatusAsync(workItemId, CurrentUserId, request);
+        await _hub.Clients.Group(BoardHub.GroupName(projectId)).SendAsync("WorkItemUpdated", result);
+        return Ok(result);
     }
 
     [HttpDelete("{workItemId:int}")]
     public async Task<IActionResult> Delete(int projectId, int workItemId)
     {
         await _workItemService.DeleteAsync(workItemId, CurrentUserId);
+        await _hub.Clients.Group(BoardHub.GroupName(projectId)).SendAsync("WorkItemDeleted", workItemId);
         return NoContent();
-    }
+    }   
 
     [HttpGet("{workItemId:int}/activity")]
     public async Task<ActionResult<List<WorkItemActivityDto>>> GetActivity(int projectId, int workItemId)
